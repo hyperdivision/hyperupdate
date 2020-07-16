@@ -1,0 +1,12 @@
+message Release {
+  required string version = 1;
+  optional string description = 2;
+  optional uint64 diffLength = 3;
+  optional uint64 byteLength = 4;
+  repeated uint64 chunks = 5 [packed=true];
+}
+
+message Header {
+  required string protocol = 1;
+  required bytes chunkFeed = 2;
+}

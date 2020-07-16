@@ -1,0 +1,38 @@
+{
+  "name": "hyperupdate",
+  "version": "0.0.0",
+  "description": "P2P Electron updater with binary diffing built in",
+  "main": "index.js",
+  "dependencies": {
+    "@hyperswarm/replicator": "^1.7.1",
+    "fd-lock": "^1.1.1",
+    "hypercore": "^9.5.0",
+    "hypertrie": "^5.0.5",
+    "protocol-buffers-encodings": "^1.1.0",
+    "pump": "^3.0.0",
+    "rabin-stream": "^1.0.0",
+    "sodium-native": "^3.2.0",
+    "streamx": "^2.6.4",
+    "tar-fs": "^2.1.0",
+    "thunky": "^1.1.0"
+  },
+  "devDependencies": {
+    "protocol-buffers": "^4.2.0"
+  },
+  "bin": {
+    "hyperupdate-release": "./release.js"
+  },
+  "scripts": {
+    "protobuf": "protocol-buffers schema.proto -o lib/messages.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/hyperdivision/hyperupdate.git"
+  },
+  "author": "Mathias Buus (@mafintosh)",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/hyperdivision/hyperupdate/issues"
+  },
+  "homepage": "https://github.com/hyperdivision/hyperupdate"
+}
