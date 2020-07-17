@@ -11,7 +11,7 @@ if (electron.remote) {
   isRemote = true
 }
 
-module.exports = class Upgrader extends EventEmitter {
+class Upgrader extends EventEmitter {
   constructor (keys, opts = {}) {
     super()
 
@@ -21,7 +21,7 @@ module.exports = class Upgrader extends EventEmitter {
     const storage = opts.storage || path.join(electron.app.getPath('userData'), 'hyperupdate', key.toString('hex'))
 
     this.version = opts.version || electron.app.getVersion()
-    this.releaser = new Releaser(storage, key)
+    this.releaser = Upgrader.isPackaged() ? new Releaser(storage, key) : null
     this.latestRelease = { version: this.version }
     this.updateAvailable = false
     this.updateDownloaded = false
@@ -29,7 +29,7 @@ module.exports = class Upgrader extends EventEmitter {
     this.swarm = null
     this.closing = false
 
-    this._checkLatestVersion()
+    if (this.releaser) this._checkLatestVersion()
     this._autoClose = () => this.close()
 
     if (isRemote) window.addEventListener('beforeunload', this._autoClose)
@@ -40,19 +40,41 @@ module.exports = class Upgrader extends EventEmitter {
     if (!this.updateDownloaded) throw new Error('Update not downloaded')
 
     const { execPath, argv } = electron.process
-    const appPath = electron.app.getAppPath()
+    const appPath = Upgrader.appPath()
 
-    this.releaser.upgrade(this.latestRelease, appPath, execPath, argv, (err) => {
+    if (!appPath) throw new Error('App is not packaged')
+
+    this.releaser.upgrade(this.latestRelease, appPath, execPath, argv.slice(1), (err) => {
       if (err) return this.emit('error', err)
       electron.app.quit()
     })
   }
 
-  close (cb) {
+  static isPackaged () {
+    return !!Upgrader.appPath()
+  }
+
+  static appPath () {
+    const appPath = electron.app.getAppPath()
+    if (appPath.indexOf('app.asar') === -1) return null
+
+    switch (process.platform) {
+      case 'linux':
+      case 'win32':
+        return path.join(appPath, '../..')
+      case 'darwin':
+        return path.join(appPath, '../../..')
+    }
+
+    throw new Error('Unsupported platform')
+  }
+
+  close (cb = noop) {
     this.closing = true
     if (isRemote) window.removeEventListener('beforeunload', this._autoClose)
     if (this.swarm) this.swarm.destroy()
-    this.releaser.close(cb)
+    if (this.releaser) this.releaser.close(cb)
+    else process.nextTick(cb)
   }
 
   _startSwarm () {
@@ -96,6 +118,8 @@ module.exports = class Upgrader extends EventEmitter {
     })
   }
 }
+
+module.exports = Upgrader
 
 function newer (old, cur) {
   const a = old.version.split('.').map(n => Number(n))
