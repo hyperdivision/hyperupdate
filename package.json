@@ -6,6 +6,7 @@
   "dependencies": {
     "@hyperswarm/replicator": "^1.7.1",
     "fd-lock": "^1.1.1",
+    "hrpc-runtime": "^2.0.0",
     "hypercore": "^9.5.0",
     "hypertrie": "^5.0.5",
     "hyperupdate-helper": "^1.0.1",
@@ -15,16 +16,19 @@
     "sodium-native": "^3.2.0",
     "streamx": "^2.6.4",
     "tar-fs": "^2.1.0",
-    "thunky": "^1.1.0"
+    "thunky": "^1.1.0",
+    "unix-socket-path": "^1.0.0"
   },
   "devDependencies": {
+    "hrpc": "^2.2.0",
     "protocol-buffers": "^4.2.0"
   },
   "bin": {
     "hyperupdate-release": "./release.js"
   },
   "scripts": {
-    "protobuf": "protocol-buffers schema.proto -o lib/messages.js"
+    "protobuf": "protocol-buffers schema.proto -o lib/messages.js",
+    "hrpc": "hrpc schema.proto --rpc lib/rpc.js --messages lib/messages.js"
   },
   "repository": {
     "type": "git",

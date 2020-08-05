@@ -49,6 +49,26 @@ After the `update-downloaded` event has fired you can use the `updateAndRelaunch
 u.updateAndRelaunch() // will apply the update and relaunch your app
 ```
 
+## RPC
+
+If you want to run the updater in the Electron process instead of the renderer you can use the RPC interface to access it.
+
+In the Electron process do
+
+``` js
+await u.listen()
+```
+
+And then in renderer do
+
+``` js
+const Client = require('hyperupdate/client')
+
+const u = new Client()
+```
+
+The remote client has the same interface as the normal updater instance.
+
 ## Adding a new release
 
 To add a new release, bump the version in your Electron's package.json and build your app using electron-builder.

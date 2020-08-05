@@ -1,15 +1,11 @@
 const Releaser = require('./lib/releaser')
 const replicator = require('@hyperswarm/replicator')
 const { EventEmitter } = require('events')
+const HRPC = require('./lib/rpc')
+const electron = require('./lib/electron')
+const getSocketPath = require('./lib/socket-path')
+const Client = require('./client')
 const path = require('path')
-
-let isRemote = false
-let electron = require('electron')
-
-if (electron.remote) {
-  electron = electron.remote
-  isRemote = true
-}
 
 class Upgrader extends EventEmitter {
   constructor (keys, opts = {}) {
@@ -18,63 +14,83 @@ class Upgrader extends EventEmitter {
     const key = keys[process.platform]
     if (!key) throw new Error('Must pass a release config')
 
-    const storage = opts.storage || path.join(electron.app.getPath('userData'), 'hyperupdate', key.toString('hex'))
+    const storage = opts.storage || path.join(opts.userData || electron.userData, 'hyperupdate', key.toString('hex'))
 
-    this.version = opts.version || electron.app.getVersion()
-    this.releaser = Upgrader.isPackaged() ? new Releaser(storage, key) : null
+    this.name = opts.name || null
+    this.appPath = opts.appPath || electron.appPath
+    this.version = opts.version || electron.appVersion || '0.0.0'
+    this.releaser = this.appPath ? new Releaser(storage, key) : null
+    this.autoQuit = opts.autoQuit !== false
+    this.execPath = opts.execPath || electron.execPath
+    this.argv = opts.argv || electron.argv
     this.latestRelease = { version: this.version }
     this.updateAvailable = false
     this.updateDownloaded = false
-    this.downloadingUpdate = false
+    this.updateDownloading = false
     this.swarm = null
+    this.server = null
     this.closing = false
 
     if (this.releaser) this._checkLatestVersion()
     this._autoClose = () => this.close()
 
-    if (isRemote) window.addEventListener('beforeunload', this._autoClose)
+    if (electron.isRemote) window.addEventListener('beforeunload', this._autoClose)
+  }
+
+  listen () {
+    if (this.server) throw new Error('Already listening')
+
+    const self = this
+    this.server = HRPC.createServer(client => {
+      client.updater.onRequest({
+        status (req) {
+          return {
+            version: self.version,
+            latestRelease: self.latestRelease,
+            updateAvailable: self.updateAvailable,
+            updateDownloaded: self.updateDownloaded,
+            updateDownloading: self.updateDownloading
+          }
+        },
+        updateAndRelaunch (req) {
+          return self.updateAndRelaunch()
+        }
+      })
+    })
+
+    return this.server.listen(getSocketPath(this.name))
+  }
+
+  static connect (name) {
+    return new Client(name)
   }
 
   updateAndRelaunch () {
     if (!this.updateAvailable) throw new Error('No update available')
     if (!this.updateDownloaded) throw new Error('Update not downloaded')
+    if (!this.appPath) throw new Error('App is not packaged')
 
-    const { execPath, argv } = electron.process
-    const appPath = Upgrader.appPath()
-
-    if (!appPath) throw new Error('App is not packaged')
-
-    this.releaser.upgrade(this.latestRelease, appPath, execPath, argv.slice(1), (err) => {
-      if (err) return this.emit('error', err)
-      electron.app.quit()
+    return new Promise((resolve, reject) => {
+      this.releaser.upgrade(this.latestRelease, this.appPath, this.execPath, this.argv.slice(1), (err) => {
+        if (err) return reject(err)
+        if (this.autoQuit) electron.quit()
+        resolve()
+      })
     })
   }
 
-  static isPackaged () {
-    return !!Upgrader.appPath()
-  }
-
-  static appPath () {
-    const appPath = electron.app.getAppPath()
-    if (appPath.indexOf('app.asar') === -1) return null
-
-    switch (process.platform) {
-      case 'linux':
-      case 'win32':
-        return path.join(appPath, '../..')
-      case 'darwin':
-        return path.join(appPath, '../../..')
-    }
-
-    throw new Error('Unsupported platform')
-  }
-
-  close (cb = noop) {
+  close () {
     this.closing = true
-    if (isRemote) window.removeEventListener('beforeunload', this._autoClose)
+    if (electron.isRemote) window.removeEventListener('beforeunload', this._autoClose)
     if (this.swarm) this.swarm.destroy()
-    if (this.releaser) this.releaser.close(cb)
-    else process.nextTick(cb)
+
+    return new Promise((resolve, reject) => {
+      if (!this.releaser) return resolve()
+      this.releaser.close((err) => {
+        if (err) return reject(err)
+        resolve()
+      })
+    })
   }
 
   _startSwarm () {
@@ -107,11 +123,11 @@ class Upgrader extends EventEmitter {
       this.updateAvailable = true
       this.emit('update-available')
 
-      this.downloadingUpdate = true
+      this.updateDownloading = true
       this.emit('update-downloading')
       this.releaser.downloadRelease(this.latestRelease, (err) => {
         if (err) return this.emit('error', err)
-        this.downloadingUpdate = false
+        this.updateDownloading = false
         this.updateDownloaded = true
         this.emit('update-downloaded')
       })
@@ -132,5 +148,3 @@ function newer (old, cur) {
 
   return a[2] < b[2]
 }
-
-function noop () {}

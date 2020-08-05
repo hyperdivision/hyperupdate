@@ -10,3 +10,23 @@ message Header {
   required string protocol = 1;
   required bytes chunkFeed = 2;
 }
+
+message StatusResponse {
+  message Release {
+    required string version = 1; // TODO: add more
+  }
+
+  required string version = 1;
+  required Release latestRelease = 2;
+  required bool updateAvailable = 3;
+  required bool updateDownloading = 4;
+  required bool updateDownloaded = 5;
+}
+
+service Updater {
+  option (hrpc.service) = 1;
+
+  rpc Status (hrpc.Void) returns (StatusResponse) { option (hrpc.method) = 1; }
+  rpc OnUpdateStatus (StatusResponse) returns (hrpc.Void) { option (hrpc.method) = 2; }
+  rpc UpdateAndRelaunch (hrpc.Void) returns (hrpc.Void) { option (hrpc.method) = 3; }
+}
