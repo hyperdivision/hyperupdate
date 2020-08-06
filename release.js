@@ -30,6 +30,7 @@ const r = new Releaser('./hyperupdate/' + platform)
 
 r.ready(function () {
   console.log('Hyperupdate ' + platform + ' key: ' + r.key.toString('hex'))
+  console.log('Adding release....')
   r.getLatestReleaseInfo(function (err, release) {
     if (err) throw err
 
@@ -45,6 +46,7 @@ r.ready(function () {
       console.log('Swarming...')
 
       replicator(r, {
+        announceLocalAddress: true,
         lookup: true,
         announce: true
       })

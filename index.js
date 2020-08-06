@@ -19,7 +19,8 @@ class Upgrader extends EventEmitter {
     this.name = opts.name || null
     this.appPath = opts.appPath || electron.appPath
     this.version = opts.version || electron.appVersion || '0.0.0'
-    this.releaser = this.appPath ? new Releaser(storage, key) : null
+    this.isPackaged = opts.isPackaged || electron.isPackaged
+    this.releaser = this.isPackaged ? new Releaser(storage, key) : null
     this.autoQuit = opts.autoQuit !== false
     this.execPath = opts.execPath || electron.execPath
     this.argv = opts.argv || electron.argv
@@ -30,6 +31,7 @@ class Upgrader extends EventEmitter {
     this.swarm = null
     this.server = null
     this.closing = false
+    this.clients = new Set()
 
     if (this.releaser) this._checkLatestVersion()
     this._autoClose = () => this.close()
@@ -42,15 +44,12 @@ class Upgrader extends EventEmitter {
 
     const self = this
     this.server = HRPC.createServer(client => {
+      this.clients.add(client)
+      client.on('close', () => this.clients.delete(client))
+
       client.updater.onRequest({
         status (req) {
-          return {
-            version: self.version,
-            latestRelease: self.latestRelease,
-            updateAvailable: self.updateAvailable,
-            updateDownloaded: self.updateDownloaded,
-            updateDownloading: self.updateDownloading
-          }
+          return self
         },
         updateAndRelaunch (req) {
           return self.updateAndRelaunch()
@@ -68,7 +67,7 @@ class Upgrader extends EventEmitter {
   updateAndRelaunch () {
     if (!this.updateAvailable) throw new Error('No update available')
     if (!this.updateDownloaded) throw new Error('Update not downloaded')
-    if (!this.appPath) throw new Error('App is not packaged')
+    if (!this.isPackaged) throw new Error('App is not packaged')
 
     return new Promise((resolve, reject) => {
       this.releaser.upgrade(this.latestRelease, this.appPath, this.execPath, this.argv.slice(1), (err) => {
@@ -98,6 +97,7 @@ class Upgrader extends EventEmitter {
       if (this.closing) return
 
       this.swarm = replicator(this.releaser, {
+        announceLocalAddress: true,
         lookup: true,
         announce: yes
       })
@@ -121,17 +121,24 @@ class Upgrader extends EventEmitter {
 
       this.latestRelease = release
       this.updateAvailable = true
-      this.emit('update-available')
+      this._onUpdate('available')
 
       this.updateDownloading = true
-      this.emit('update-downloading')
+      this._onUpdate('downloading')
       this.releaser.downloadRelease(this.latestRelease, (err) => {
         if (err) return this.emit('error', err)
         this.updateDownloading = false
         this.updateDownloaded = true
-        this.emit('update-downloaded')
+        this._onUpdate('downloaded')
       })
     })
+  }
+
+  _onUpdate (name) {
+    this.emit('update-' + name)
+    for (const client of this.clients) {
+      client.updater.onUpdateStatus(this)
+    }
   }
 }
 
