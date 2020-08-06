@@ -9,7 +9,7 @@
     "hrpc-runtime": "^2.0.0",
     "hypercore": "^9.5.0",
     "hypertrie": "^5.0.5",
-    "hyperupdate-helper": "^1.0.1",
+    "hyperupdate-helper": "^1.0.2",
     "protocol-buffers-encodings": "^1.1.0",
     "pump": "^3.0.0",
     "rabin-stream": "^1.0.0",
