@@ -14,7 +14,7 @@ module.exports = class UpdaterClient extends EventEmitter {
     this.updateDownloaded = false
     this.updateDownloading = false
 
-    this.client.updater.onRequest({ onStatusChange: (s) => this._update(s) })
+    this.client.updater.onRequest({ onUpdateStatus: (s) => this._update(s) })
 
     this.ready().catch((err) => this.emit('error', err))
   }
