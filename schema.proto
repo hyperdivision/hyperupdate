@@ -11,11 +11,11 @@ message Header {
   required bytes chunkFeed = 2;
 }
 
-message StatusResponse {
-  message Release {
-    required string version = 1; // TODO: add more
-  }
+message Release {
+  required string version = 1; // TODO: add more
+}
 
+message StatusResponse {
   required string version = 1;
   required Release latestRelease = 2;
   required bool updateAvailable = 3;
@@ -29,4 +29,6 @@ service Updater {
   rpc Status (hrpc.Void) returns (StatusResponse) { option (hrpc.method) = 1; }
   rpc OnUpdateStatus (StatusResponse) returns (hrpc.Void) { option (hrpc.method) = 2; }
   rpc UpdateAndRelaunch (hrpc.Void) returns (hrpc.Void) { option (hrpc.method) = 3; }
+  rpc DownloadUpdate (hrpc.Void) returns (hrpc.Void) { option (hrpc.method) = 4; }
+  rpc NextUpdate (hrpc.Void) returns (Release) { option (hrpc.method) = 5; }
 }

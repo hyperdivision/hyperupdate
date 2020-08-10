@@ -51,4 +51,12 @@ module.exports = class UpdaterClient extends EventEmitter {
   updateAndRelaunch () {
     return this.client.updater.updateAndRelaunch()
   }
+
+  downloadUpdate () {
+    return this.client.updater.downloadUpdate()
+  }
+
+  nextUpdate () {
+    return this.client.updater.nextUpdate()
+  }
 }

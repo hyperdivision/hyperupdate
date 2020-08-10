@@ -8,10 +8,10 @@ const Client = require('./client')
 const path = require('path')
 
 class Upgrader extends EventEmitter {
-  constructor (keys, opts = {}) {
+  constructor (opts = {}) {
     super()
 
-    const key = keys[process.platform]
+    const key = opts[process.platform]
     if (!key) throw new Error('Must pass a release config')
 
     const storage = opts.storage || path.join(opts.userData || electron.userData, 'hyperupdate', key.toString('hex'))
@@ -35,6 +35,7 @@ class Upgrader extends EventEmitter {
 
     if (this.releaser) this._checkLatestVersion()
     this._autoClose = () => this.close()
+    this._cancelDownload = (fn) => fn()
 
     if (electron.isRemote) window.addEventListener('beforeunload', this._autoClose)
   }
@@ -53,6 +54,12 @@ class Upgrader extends EventEmitter {
         },
         updateAndRelaunch (req) {
           return self.updateAndRelaunch()
+        },
+        downloadUpdate (req) {
+          return self.downloadUpdate()
+        },
+        nextUpdate (req) {
+          return self.nextUpdate()
         }
       })
     })
@@ -64,12 +71,30 @@ class Upgrader extends EventEmitter {
     return new Client(name)
   }
 
-  updateAndRelaunch () {
-    if (!this.updateAvailable) throw new Error('No update available')
-    if (!this.updateDownloaded) throw new Error('Update not downloaded')
-    if (!this.isPackaged) throw new Error('App is not packaged')
-
+  nextUpdate () {
     return new Promise((resolve, reject) => {
+      const onupdate = () => {
+        this.removeListener('closing', onclosing)
+        this.removeListener('update-available', onupdate)
+        resolve(this.latestRelease)
+      }
+      const onclosing = () => {
+        this.removeListener('closing', onclosing)
+        this.removeListener('update-available', onupdate)
+        reject(new Error('Closing'))
+      }
+
+      this.on('update-available', onupdate)
+      this.on('closing', onclosing)
+    })
+  }
+
+  updateAndRelaunch () {
+    return new Promise((resolve, reject) => {
+      if (!this.updateAvailable) throw new Error('No update available')
+      if (!this.updateDownloaded) throw new Error('Update not downloaded')
+      if (!this.isPackaged) throw new Error('App is not packaged')
+
       this.releaser.upgrade(this.latestRelease, this.appPath, this.execPath, this.argv.slice(1), (err) => {
         if (err) return reject(err)
         if (this.autoQuit) electron.quit()
@@ -78,8 +103,48 @@ class Upgrader extends EventEmitter {
     })
   }
 
+  isUpdateDownloaded () {
+    return new Promise((resolve, reject) => {
+      this.releaser.isDownloaded(this.latestRelease, (err, yes) => {
+        if (err) return reject(err)
+        resolve(yes)
+      })
+    })
+  }
+
+  downloadUpdate () {
+    return new Promise((resolve, reject) => {
+      const oncancelled = () => {
+        if (prev !== this._cancelDownload) { // parallel download
+          prev = this._cancelDownload
+          this._cancelDownload(oncancelled)
+          return
+        }
+
+        this.updateDownloading = true
+        this._onUpdate('downloading')
+        this._cancelDownload = this.releaser.downloadRelease(this.latestRelease, (err) => {
+          if (prev !== this._cancelDownload) return reject(new Error('Download was cancelled'))
+          this.updateDownloading = false
+          if (err) return reject(err)
+          this.updateDownloaded = true
+          this._onUpdate('downloaded')
+          resolve()
+        })
+        prev = this._cancelDownload
+      }
+
+      let prev = this._cancelDownload
+      this._cancelDownload(oncancelled)
+    })
+  }
+
   close () {
-    this.closing = true
+    if (!this.closing) {
+      this.closing = true
+      this.emit('closing')
+    }
+
     if (electron.isRemote) window.removeEventListener('beforeunload', this._autoClose)
     if (this.swarm) this.swarm.destroy()
 
@@ -108,11 +173,12 @@ class Upgrader extends EventEmitter {
 
   _checkLatestVersion () {
     if (this.closing) return
-    if (this.updateAvailable) return
+    if (this.updateDownloading || this.updateDownloaded) return
     if (!this.swarm) return this._startSwarm()
 
     this.releaser.getLatestReleaseInfo((_, release) => {
       if (this.closing) return
+      if (this.updateDownloading || this.updateDownloaded) return
 
       if (!release || !newer(this.latestRelease, release)) {
         this.releaser.update(() => this._checkLatestVersion())
@@ -123,14 +189,7 @@ class Upgrader extends EventEmitter {
       this.updateAvailable = true
       this._onUpdate('available')
 
-      this.updateDownloading = true
-      this._onUpdate('downloading')
-      this.releaser.downloadRelease(this.latestRelease, (err) => {
-        if (err) return this.emit('error', err)
-        this.updateDownloading = false
-        this.updateDownloaded = true
-        this._onUpdate('downloaded')
-      })
+      this._checkLatestVersion()
     })
   }
 
