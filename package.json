@@ -1,6 +1,6 @@
 {
   "name": "hyperupdate",
-  "version": "1.0.3",
+  "version": "1.1.0",
   "description": "P2P Electron updater with binary diffing built in",
   "main": "index.js",
   "dependencies": {
