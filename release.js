@@ -2,6 +2,7 @@
 
 const Releaser = require('./lib/releaser')
 const path = require('path')
+const fs = require('fs')
 const replicator = require('@hyperswarm/replicator')
 
 if (!process.argv[2]) {
@@ -24,35 +25,67 @@ if (!process.argv[2]) {
   return
 }
 
-const { platform, version, folder } = parse(process.argv[2])
+const dist = process.argv[2]
+const dirs = fs.readdirSync(dist)
+const platforms = []
 
-const r = new Releaser('./hyperupdate/' + platform)
+if (dirs.includes('mac')) {
+  const app = firstApp(path.join(dist, 'mac'))
+  if (app) platforms.push(parse(app))
+}
+if (dirs.includes('linux-unpacked')) platforms.push(parse(path.join(dist, 'linux-unpacked')))
+if (dirs.includes('win-unpacked')) platforms.push(parse(path.join(dist, 'win-unpacked')))
+if (!dirs.length) platforms.push(parse(dist))
 
-r.ready(function () {
-  console.log('Hyperupdate ' + platform + ' key: ' + r.key.toString('hex'))
-  console.log('Adding release....')
-  r.getLatestReleaseInfo(function (err, release) {
-    if (err) throw err
+loop()
 
-    if (release && release.version === version) return done(null, null)
-    r.addRelease(folder, { version }, done)
+function loop () {
+  if (!platforms.length) return
+  release(platforms.shift(), loop)
+}
 
-    function done (err, newRelease) {
+function firstApp (dir) {
+  const all = fs.readdirSync(dir)
+  for (const app of all) {
+    if (app.endsWith('.app')) return path.join(dir, app)
+  }
+  return null
+}
+
+function release ({ platform, version, folder }, cb) {
+  const r = new Releaser('./hyperupdate/' + platform)
+  const prefix = '[' + platform + ']'
+
+  console.log(prefix, 'Releasing ' + folder)
+
+  r.ready(function () {
+    console.log(prefix, 'Hyperupdate key: ' + r.key.toString('hex'))
+    console.log(prefix, 'Adding release....')
+    r.getLatestReleaseInfo(function (err, release) {
       if (err) throw err
 
-      if (newRelease) console.log('Added release', newRelease)
-      else console.log('Release already added...', release)
+      if (release && release.version === version) return done(null, null)
+      r.addRelease(folder, { version }, done)
 
-      console.log('Swarming...')
+      function done (err, newRelease) {
+        if (err) throw err
 
-      replicator(r, {
-        announceLocalAddress: true,
-        lookup: true,
-        announce: true
-      })
-    }
+        if (newRelease) console.log(prefix, 'Added release', newRelease)
+        else console.log(prefix, 'Release already added...', release)
+
+        console.log(prefix, 'Swarming...')
+
+        replicator(r, {
+          announceLocalAddress: true,
+          lookup: true,
+          announce: true
+        })
+
+        if (cb) cb()
+      }
+    })
   })
-})
+}
 
 function parse (folder) {
   const dir = path.basename(folder)
