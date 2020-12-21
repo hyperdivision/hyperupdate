@@ -11,10 +11,6 @@ message Header {
   required bytes chunkFeed = 2;
 }
 
-message Release {
-  required string version = 1; // TODO: add more
-}
-
 message StatusResponse {
   required string version = 1;
   required Release latestRelease = 2;
